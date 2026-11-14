@@ -1,0 +1,10 @@
+# Local database configuration
+/config/database.php
+
+# Database backup files
+/database/*.sql
+
+# Environment variables
+.env
+.env.*
+!.env.example
