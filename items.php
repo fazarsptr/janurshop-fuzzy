@@ -8,10 +8,19 @@ if (isset($_SESSION['role']) && $_SESSION['role'] === 'pemilik') {
 }
 require_once 'config/database.php';
 require_once 'helpers/FuzzyMamdani.php';
+require_once 'helpers/StockManager.php';
 include 'views/header.php';
 
 if (isset($_GET['delete'])) {
     $id = (int)$_GET['delete'];
+
+    // Audit Trail Integrity: Prevent product deletion when historical stock movements exist
+    if (StockManager::hasMovements($id)) {
+        $_SESSION['error'] = "Barang tidak dapat dihapus karena memiliki riwayat pergerakan stok. Untuk menjaga integritas audit, barang dengan riwayat mutasi tidak boleh dihapus.";
+        echo "<script>window.location.href='items.php';</script>";
+        exit;
+    }
+
     db_query("DELETE FROM items WHERE id = $id");
     db_query("INSERT INTO activity_logs (user_id, action) VALUES (" . $_SESSION['user_id'] . ", 'Menghapus barang ID: $id')");
     $_SESSION['success'] = "Data barang berhasil dihapus.";
@@ -59,7 +68,7 @@ $result = db_query($query);
                         <th>Pemasok</th>
                         <th>Harga</th>
                         <th>Kedaluwarsa</th>
-                        <th width="150">Aksi</th>
+                        <th width="190">Aksi</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -101,6 +110,7 @@ $result = db_query($query);
                             </td>
                             <td>
                                 <a href="item_detail.php?id=<?php echo $row['id']; ?>" class="btn btn-info btn-sm text-white" title="Detail"><i class="fas fa-eye"></i></a>
+                                <a href="stock_movement.php?item_id=<?php echo $row['id']; ?>" class="btn btn-secondary btn-sm" title="Mutasi Stok"><i class="fas fa-exchange-alt"></i></a>
                                 <a href="item_form.php?id=<?php echo $row['id']; ?>" class="btn btn-warning btn-sm text-white" title="Ubah"><i class="fas fa-edit"></i></a>
                                 <a href="items.php?delete=<?php echo $row['id']; ?>" class="btn btn-danger btn-sm" onclick="return confirm('Yakin ingin menghapus permanen data ini?');" title="Hapus"><i class="fas fa-trash"></i></a>
                             </td>
