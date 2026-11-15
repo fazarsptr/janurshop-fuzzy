@@ -16,7 +16,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
         <?php if ($_SESSION['role'] !== 'pemilik'): ?>
         <li class="nav-item">
             <a class="nav-link <?php echo ($current_page == 'items.php' || $current_page == 'item_form.php' || $current_page == 'item_detail.php') ? 'active' : ''; ?>" href="items.php">
-                <i class="fas fa-box fa-fw"></i> Data Barang
+                <i class="fas fa-box fa-fw"></i>
+                <span class="flex-grow-1">Data Barang</span>
+                <?php if (isset($lowStockCount) && $lowStockCount > 0): ?>
+                    <span class="badge rounded-pill bg-danger ms-auto" title="<?php echo $lowStockCount; ?> low-stock products"><?php echo $lowStockCount; ?></span>
+                <?php endif; ?>
             </a>
         </li>
         <li class="nav-item">

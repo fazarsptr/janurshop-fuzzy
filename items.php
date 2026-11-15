@@ -69,11 +69,26 @@ $result = db_query($query);
                             $fuzz = FuzzyMamdani::fuzzifikasi($row);
                             $demandLing = FuzzyMamdani::getKategoriDominan($fuzz['Demand']);
                             $expiredLing = FuzzyMamdani::getKategoriDominan($fuzz['Expired']);
+                            $isLowStock = ((float)$row['stock'] <= (float)$row['min_stock_limit']);
                         ?>
-                        <tr>
+                        <tr class="<?php echo $isLowStock ? 'table-warning' : ''; ?>">
                             <td><?php echo htmlspecialchars($row['code']); ?></td>
-                            <td><?php echo htmlspecialchars($row['name']); ?></td>
-                            <td><?php echo number_format($row['stock']); ?></td>
+                            <td>
+                                <?php echo htmlspecialchars($row['name']); ?>
+                                <?php if ($isLowStock): ?>
+                                    <span class="badge bg-danger ms-1" title="Low stock: Current stock is at or below minimum limit">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>Low Stock
+                                    </span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <span class="<?php echo $isLowStock ? 'fw-bold text-danger' : ''; ?>">
+                                    <?php echo number_format($row['stock']); ?>
+                                </span>
+                                <?php if ($isLowStock): ?>
+                                    <small class="text-muted d-block">(Min: <?php echo number_format($row['min_stock_limit']); ?>)</small>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <span class="badge bg-secondary"><?php echo $demandLing; ?></span>
                             </td>
