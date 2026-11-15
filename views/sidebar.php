@@ -30,6 +30,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
         </li>
         <?php endif; ?>
         <li class="nav-item">
+            <a class="nav-link <?php echo ($current_page == 'stock_movement.php') ? 'active' : ''; ?>" href="stock_movement.php">
+                <i class="fas fa-exchange-alt fa-fw"></i> Riwayat Mutasi
+            </a>
+        </li>
+        <li class="nav-item">
             <a class="nav-link <?php echo ($current_page == 'analysis.php') ? 'active' : ''; ?>" href="analysis.php">
                 <i class="fas fa-cogs fa-fw"></i> Analisis Fuzzy
             </a>

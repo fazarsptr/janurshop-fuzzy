@@ -8,6 +8,7 @@ if (isset($_SESSION['role']) && $_SESSION['role'] === 'pemilik') {
 }
 require_once 'config/database.php';
 require_once 'helpers/FuzzyMamdani.php';
+require_once 'helpers/StockManager.php';
 include 'views/header.php';
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $item = null;
@@ -35,23 +36,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $fs_b = (float)$_POST['fuzzy_stok_bawah'];
     $fs_t = (float)$_POST['fuzzy_stok_tengah'];
     $fs_a = (float)$_POST['fuzzy_stok_atas'];
-    
+
     $fd_b = (float)$_POST['fuzzy_demand_bawah'];
     $fd_t = (float)$_POST['fuzzy_demand_tengah'];
     $fd_a = (float)$_POST['fuzzy_demand_atas'];
     $fl_b = (float)$_POST['fuzzy_leadtime_bawah'];
     $fl_t = (float)$_POST['fuzzy_leadtime_tengah'];
     $fl_a = (float)$_POST['fuzzy_leadtime_atas'];
-    
+
     $fh_b = (float)$_POST['fuzzy_harga_bawah'];
     $fh_a = (float)$_POST['fuzzy_harga_atas'];
-    
+
     $fe_b = (float)$_POST['fuzzy_expired_bawah'];
     $fe_a = (float)$_POST['fuzzy_expired_atas'];
     if ($id > 0) {
-
-        $q = "UPDATE items SET 
-              code='$code', name='$name', stock=$stock, demand=$demand, supplier_id=$supplier_id, 
+        // When editing an existing item, physical stock is NOT modified directly here.
+        // All stock mutations must be recorded through StockManager / stock_movement.php.
+        $q = "UPDATE items SET
+              code='$code', name='$name', demand=$demand, supplier_id=$supplier_id,
               price=$price, expired_days=$expired_days, min_stock_limit=$min_stock_limit, stok_max=$stok_max,
               fuzzy_stok_bawah=$fs_b, fuzzy_stok_tengah=$fs_t, fuzzy_stok_atas=$fs_a,
               fuzzy_demand_bawah=$fd_b, fuzzy_demand_tengah=$fd_t, fuzzy_demand_atas=$fd_a,
@@ -62,26 +64,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         db_query($q);
         db_query("INSERT INTO activity_logs (user_id, action) VALUES (" . $_SESSION['user_id'] . ", 'Update barang ID: $id')");
         $_SESSION['success'] = "Data barang berhasil diperbarui.";
+        echo "<script>window.location.href='items.php';</script>";
+        exit;
     } else {
-
-        $q = "INSERT INTO items (
-                code, name, stock, demand, supplier_id, price, expired_days, min_stock_limit, stok_max,
-                fuzzy_stok_bawah, fuzzy_stok_tengah, fuzzy_stok_atas,
-                fuzzy_demand_bawah, fuzzy_demand_tengah, fuzzy_demand_atas,
-                fuzzy_leadtime_bawah, fuzzy_leadtime_tengah, fuzzy_leadtime_atas,
-                fuzzy_harga_bawah, fuzzy_harga_atas,
-                fuzzy_expired_bawah, fuzzy_expired_atas
-              ) VALUES (
-                '$code', '$name', $stock, $demand, $supplier_id, $price, $expired_days, $min_stock_limit, $stok_max,
-                $fs_b, $fs_t, $fs_a, $fd_b, $fd_t, $fd_a, $fl_b, $fl_t, $fl_a, $fh_b, $fh_a, $fe_b, $fe_a
-              )";
-        db_query($q);
-        db_query("INSERT INTO activity_logs (user_id, action) VALUES (" . $_SESSION['user_id'] . ", 'Tambah barang: $name')");
-        $_SESSION['success'] = "Data barang baru berhasil ditambahkan.";
+        // When adding a new item, create item and its initial opening balance atomically
+        $createResult = StockManager::createItemWithInitialStock($_POST, (int)$_SESSION['user_id']);
+        if ($createResult['success']) {
+            $_SESSION['success'] = "Data barang baru berhasil ditambahkan beserta saldo awal stok.";
+            echo "<script>window.location.href='items.php';</script>";
+            exit;
+        } else {
+            $_SESSION['error'] = "Gagal menambahkan barang: " . htmlspecialchars($createResult['error']);
+        }
     }
-    
-    echo "<script>window.location.href='items.php';</script>";
-    exit;
 }
 
 $suppliers = db_query("SELECT * FROM suppliers");
@@ -107,7 +102,18 @@ $suppliers = db_query("SELECT * FROM suppliers");
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label>Stok Saat Ini (Pcs)</label>
-                            <input type="number" step="1" name="stock" class="form-control" value="<?php echo $item ? $item['stock'] : ''; ?>" required>
+                            <?php if ($id > 0): ?>
+                                <div class="input-group">
+                                    <input type="number" name="stock" class="form-control bg-light" value="<?php echo $item ? $item['stock'] : ''; ?>" readonly>
+                                    <a href="stock_movement.php?item_id=<?php echo $item['id']; ?>" class="btn btn-outline-secondary" title="Kelola Mutasi Stok">
+                                        <i class="fas fa-exchange-alt"></i> Mutasi
+                                    </a>
+                                </div>
+                                <small class="text-muted"><i class="fas fa-lock text-warning"></i> Stok dikunci. Untuk mengubah jumlah stok, silakan gunakan menu <strong>Mutasi Stok</strong>.</small>
+                            <?php else: ?>
+                                <input type="number" step="1" min="0" name="stock" class="form-control" value="0" required>
+                                <small class="text-muted">Stok awal akan dicatat otomatis sebagai saldo awal.</small>
+                            <?php endif; ?>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label>Permintaan</label>
@@ -151,7 +157,7 @@ $suppliers = db_query("SELECT * FROM suppliers");
                 <div class="col-md-6">
                     <h6 class="text-primary-theme fw-bold mb-3"><i class="fas fa-sliders-h"></i> Parameter Batas Fuzzy Khusus Barang Ini</h6>
                     <p class="small text-muted">Sesuaikan titik batas himpunan linguistik spesifik untuk barang ini.</p>
-                    
+
                     <div class="row mb-2">
                         <div class="col-12"><label class="fw-bold">Stok (Bawah, Tengah, Atas)</label></div>
                         <div class="col-4"><input type="number" step="0.01" name="fuzzy_stok_bawah" class="form-control form-control-sm" value="<?php echo $item ? $item['fuzzy_stok_bawah'] : ''; ?>"></div>

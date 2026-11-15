@@ -3,6 +3,7 @@
 
 # Database backup files
 /database/*.sql
+!/database/migration_stock_movements.sql
 
 # Environment variables
 .env
