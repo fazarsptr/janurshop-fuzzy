@@ -28,35 +28,57 @@ if (isset($_GET['delete'])) {
     exit;
 }
 
-$search = isset($_GET['search']) ? $_GET['search'] : '';
-$whereClause = "";
-if (!empty($search)) {
-    global $conn;
-    $safe_search = $conn->real_escape_string($search);
-    $whereClause = "WHERE i.code LIKE '%$safe_search%' OR i.name LIKE '%$safe_search%'";
-}
+$search = isset($_GET['search']) ? trim($_GET['search']) : '';
+global $conn;
 
-$query = "
-    SELECT i.*, s.name as supplier_name, s.lead_time_days 
-    FROM items i 
-    LEFT JOIN suppliers s ON i.supplier_id = s.id
-    $whereClause
-    ORDER BY i.id DESC
-";
-$result = db_query($query);
+if ($search !== '') {
+    $searchPattern = '%' . $search . '%';
+    $stmt = $conn->prepare("
+        SELECT i.*, s.name as supplier_name, s.lead_time_days
+        FROM items i
+        LEFT JOIN suppliers s ON i.supplier_id = s.id
+        WHERE i.code LIKE ? OR i.name LIKE ?
+        ORDER BY i.id DESC
+    ");
+    $stmt->bind_param("ss", $searchPattern, $searchPattern);
+    $stmt->execute();
+    $result = $stmt->get_result();
+} else {
+    $query = "
+        SELECT i.*, s.name as supplier_name, s.lead_time_days
+        FROM items i
+        LEFT JOIN suppliers s ON i.supplier_id = s.id
+        ORDER BY i.id DESC
+    ";
+    $result = db_query($query);
+}
 ?>
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Data Barang</h5>
         <div class="d-flex gap-2">
-            <form method="GET" action="" class="d-flex gap-2">
-                <input type="text" name="search" class="form-control form-control-sm" placeholder="Cari kode atau nama barang..." value="<?php echo isset($_GET['search']) ? htmlspecialchars($_GET['search']) : ''; ?>">
-                <button type="submit" class="btn btn-secondary btn-sm">Cari</button>
+            <form method="GET" action="items.php" class="d-flex gap-2">
+                <div class="input-group input-group-sm">
+                    <input type="text" name="search" class="form-control" placeholder="Cari kode atau nama barang..." value="<?php echo htmlspecialchars($search); ?>">
+                    <button type="submit" class="btn btn-secondary" title="Cari"><i class="fas fa-search"></i></button>
+                    <?php if ($search !== ''): ?>
+                        <a href="items.php" class="btn btn-outline-secondary" title="Hapus Pencarian"><i class="fas fa-times"></i></a>
+                    <?php endif; ?>
+                </div>
             </form>
             <a href="item_form.php" class="btn btn-primary btn-sm text-nowrap"><i class="fas fa-plus"></i> Tambah Barang</a>
         </div>
     </div>
     <div class="card-body">
+        <?php if ($search !== ''): ?>
+            <div class="alert alert-info py-2 px-3 mb-3 d-flex justify-content-between align-items-center">
+                <span>
+                    <i class="fas fa-info-circle me-1"></i> Menampilkan hasil pencarian untuk: "<strong><?php echo htmlspecialchars($search); ?></strong>"
+                    (<strong><?php echo $result ? $result->num_rows : 0; ?></strong> barang ditemukan)
+                </span>
+                <a href="items.php" class="btn btn-sm btn-outline-secondary py-0 px-2 text-decoration-none">Reset</a>
+            </div>
+        <?php endif; ?>
         <div class="table-responsive">
             <table class="table table-hover table-bordered align-middle">
                 <thead>
@@ -73,7 +95,7 @@ $result = db_query($query);
                 </thead>
                 <tbody>
                     <?php if($result && $result->num_rows > 0): ?>
-                        <?php while($row = $result->fetch_assoc()): 
+                        <?php while($row = $result->fetch_assoc()):
 
                             $fuzz = FuzzyMamdani::fuzzifikasi($row);
                             $demandLing = FuzzyMamdani::getKategoriDominan($fuzz['Demand']);
@@ -118,7 +140,20 @@ $result = db_query($query);
                         <?php endwhile; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="8" class="text-center">Belum ada data barang.</td>
+                            <td colspan="8" class="text-center py-4 text-muted">
+                                <?php if ($search !== ''): ?>
+                                    <i class="fas fa-search fa-2x mb-2 d-block opacity-25"></i>
+                                    Barang dengan kata kunci "<strong><?php echo htmlspecialchars($search); ?></strong>" tidak ditemukan.
+                                    <div class="mt-2">
+                                        <a href="items.php" class="btn btn-outline-secondary btn-sm">
+                                            <i class="fas fa-redo me-1"></i> Tampilkan Semua Barang
+                                        </a>
+                                    </div>
+                                <?php else: ?>
+                                    <i class="fas fa-box-open fa-2x mb-2 d-block opacity-25"></i>
+                                    Belum ada data barang.
+                                <?php endif; ?>
+                            </td>
                         </tr>
                     <?php endif; ?>
                 </tbody>
