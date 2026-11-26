@@ -29,40 +29,73 @@ if (isset($_GET['delete'])) {
 }
 
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
+$stock_status = isset($_GET['stock_status']) ? trim($_GET['stock_status']) : 'all';
+if (!in_array($stock_status, ['all', 'low', 'empty'], true)) {
+    $stock_status = 'all';
+}
+
+$stockStatusLabels = [
+    'all' => 'Semua Stok',
+    'low' => 'Stok Rendah',
+    'empty' => 'Stok Habis'
+];
+
+$isFiltered = ($search !== '' || $stock_status !== 'all');
+
 global $conn;
 
+$whereConditions = [];
+$params = [];
+$types = "";
+
 if ($search !== '') {
+    $whereConditions[] = "(i.code LIKE ? OR i.name LIKE ?)";
     $searchPattern = '%' . $search . '%';
-    $stmt = $conn->prepare("
-        SELECT i.*, s.name as supplier_name, s.lead_time_days
-        FROM items i
-        LEFT JOIN suppliers s ON i.supplier_id = s.id
-        WHERE i.code LIKE ? OR i.name LIKE ?
-        ORDER BY i.id DESC
-    ");
-    $stmt->bind_param("ss", $searchPattern, $searchPattern);
+    $params[] = $searchPattern;
+    $params[] = $searchPattern;
+    $types .= "ss";
+}
+
+if ($stock_status === 'low') {
+    $whereConditions[] = "i.stock <= i.min_stock_limit";
+} elseif ($stock_status === 'empty') {
+    $whereConditions[] = "i.stock <= 0";
+}
+
+$whereClause = !empty($whereConditions) ? "WHERE " . implode(" AND ", $whereConditions) : "";
+
+$query = "
+    SELECT i.*, s.name as supplier_name, s.lead_time_days
+    FROM items i
+    LEFT JOIN suppliers s ON i.supplier_id = s.id
+    $whereClause
+    ORDER BY i.id DESC
+";
+
+if (!empty($params)) {
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param($types, ...$params);
     $stmt->execute();
     $result = $stmt->get_result();
 } else {
-    $query = "
-        SELECT i.*, s.name as supplier_name, s.lead_time_days
-        FROM items i
-        LEFT JOIN suppliers s ON i.supplier_id = s.id
-        ORDER BY i.id DESC
-    ";
     $result = db_query($query);
 }
 ?>
 <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h5 class="mb-0">Data Barang</h5>
-        <div class="d-flex gap-2">
-            <form method="GET" action="items.php" class="d-flex gap-2">
-                <div class="input-group input-group-sm">
+        <div class="d-flex gap-2 flex-wrap">
+            <form method="GET" action="items.php" class="d-flex gap-2 flex-wrap align-items-center">
+                <select name="stock_status" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+                    <option value="all" <?php echo ($stock_status === 'all') ? 'selected' : ''; ?>>Semua Stok</option>
+                    <option value="low" <?php echo ($stock_status === 'low') ? 'selected' : ''; ?>>Stok Rendah</option>
+                    <option value="empty" <?php echo ($stock_status === 'empty') ? 'selected' : ''; ?>>Stok Habis</option>
+                </select>
+                <div class="input-group input-group-sm" style="min-width: 220px;">
                     <input type="text" name="search" class="form-control" placeholder="Cari kode atau nama barang..." value="<?php echo htmlspecialchars($search); ?>">
                     <button type="submit" class="btn btn-secondary" title="Cari"><i class="fas fa-search"></i></button>
-                    <?php if ($search !== ''): ?>
-                        <a href="items.php" class="btn btn-outline-secondary" title="Hapus Pencarian"><i class="fas fa-times"></i></a>
+                    <?php if ($isFiltered): ?>
+                        <a href="items.php" class="btn btn-outline-secondary" title="Reset Filter"><i class="fas fa-times"></i></a>
                     <?php endif; ?>
                 </div>
             </form>
@@ -70,13 +103,21 @@ if ($search !== '') {
         </div>
     </div>
     <div class="card-body">
-        <?php if ($search !== ''): ?>
-            <div class="alert alert-info py-2 px-3 mb-3 d-flex justify-content-between align-items-center">
+        <?php if ($isFiltered): ?>
+            <div class="alert alert-info py-2 px-3 mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <span>
-                    <i class="fas fa-info-circle me-1"></i> Menampilkan hasil pencarian untuk: "<strong><?php echo htmlspecialchars($search); ?></strong>"
+                    <i class="fas fa-filter me-1"></i>
+                    Menampilkan data barang
+                    <?php if ($search !== '' && $stock_status !== 'all'): ?>
+                        untuk kata kunci "<strong><?php echo htmlspecialchars($search); ?></strong>" dengan status <strong><?php echo $stockStatusLabels[$stock_status]; ?></strong>
+                    <?php elseif ($search !== ''): ?>
+                        untuk kata kunci "<strong><?php echo htmlspecialchars($search); ?></strong>"
+                    <?php elseif ($stock_status !== 'all'): ?>
+                        dengan status <strong><?php echo $stockStatusLabels[$stock_status]; ?></strong>
+                    <?php endif; ?>
                     (<strong><?php echo $result ? $result->num_rows : 0; ?></strong> barang ditemukan)
                 </span>
-                <a href="items.php" class="btn btn-sm btn-outline-secondary py-0 px-2 text-decoration-none">Reset</a>
+                <a href="items.php" class="btn btn-sm btn-outline-secondary py-0 px-2 text-decoration-none">Reset Filter</a>
             </div>
         <?php endif; ?>
         <div class="table-responsive">
@@ -100,23 +141,30 @@ if ($search !== '') {
                             $fuzz = FuzzyMamdani::fuzzifikasi($row);
                             $demandLing = FuzzyMamdani::getKategoriDominan($fuzz['Demand']);
                             $expiredLing = FuzzyMamdani::getKategoriDominan($fuzz['Expired']);
+                            $isOutOfStock = ((float)$row['stock'] <= 0);
                             $isLowStock = ((float)$row['stock'] <= (float)$row['min_stock_limit']);
                         ?>
-                        <tr class="<?php echo $isLowStock ? 'table-warning' : ''; ?>">
+                        <tr class="<?php echo $isOutOfStock ? 'table-danger' : ($isLowStock ? 'table-warning' : ''); ?>">
                             <td><?php echo htmlspecialchars($row['code']); ?></td>
                             <td>
                                 <?php echo htmlspecialchars($row['name']); ?>
-                                <?php if ($isLowStock): ?>
-                                    <span class="badge bg-danger ms-1" title="Low stock: Current stock is at or below minimum limit">
-                                        <i class="fas fa-exclamation-triangle me-1"></i>Low Stock
+                                <?php if ($isOutOfStock): ?>
+                                    <span class="badge bg-danger ms-1" title="Stok Habis: Sisa stok 0 Pcs">
+                                        <i class="fas fa-times-circle me-1"></i>Stok Habis
+                                    </span>
+                                <?php elseif ($isLowStock): ?>
+                                    <span class="badge bg-warning text-dark ms-1" title="Stok Rendah: Di bawah batas minimum">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>Stok Rendah
                                     </span>
                                 <?php endif; ?>
                             </td>
                             <td>
-                                <span class="<?php echo $isLowStock ? 'fw-bold text-danger' : ''; ?>">
+                                <span class="<?php echo ($isOutOfStock || $isLowStock) ? 'fw-bold text-danger' : ''; ?>">
                                     <?php echo number_format($row['stock']); ?>
                                 </span>
-                                <?php if ($isLowStock): ?>
+                                <?php if ($isOutOfStock): ?>
+                                    <small class="text-danger d-block fw-semibold">(Stok Habis)</small>
+                                <?php elseif ($isLowStock): ?>
                                     <small class="text-muted d-block">(Min: <?php echo number_format($row['min_stock_limit']); ?>)</small>
                                 <?php endif; ?>
                             </td>
@@ -141,9 +189,15 @@ if ($search !== '') {
                     <?php else: ?>
                         <tr>
                             <td colspan="8" class="text-center py-4 text-muted">
-                                <?php if ($search !== ''): ?>
+                                <?php if ($isFiltered): ?>
                                     <i class="fas fa-search fa-2x mb-2 d-block opacity-25"></i>
-                                    Barang dengan kata kunci "<strong><?php echo htmlspecialchars($search); ?></strong>" tidak ditemukan.
+                                    <?php if ($search !== '' && $stock_status !== 'all'): ?>
+                                        Barang dengan kata kunci "<strong><?php echo htmlspecialchars($search); ?></strong>" dan status <strong><?php echo $stockStatusLabels[$stock_status]; ?></strong> tidak ditemukan.
+                                    <?php elseif ($search !== ''): ?>
+                                        Barang dengan kata kunci "<strong><?php echo htmlspecialchars($search); ?></strong>" tidak ditemukan.
+                                    <?php else: ?>
+                                        Tidak ada barang dengan status <strong><?php echo $stockStatusLabels[$stock_status]; ?></strong>.
+                                    <?php endif; ?>
                                     <div class="mt-2">
                                         <a href="items.php" class="btn btn-outline-secondary btn-sm">
                                             <i class="fas fa-redo me-1"></i> Tampilkan Semua Barang
