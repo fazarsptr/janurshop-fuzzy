@@ -80,7 +80,107 @@ if (!empty($params)) {
 } else {
     $result = db_query($query);
 }
+
+// Inventory Summary Statistics (consistent with active search and stock_status filters)
+$statsQuery = "
+    SELECT
+        COUNT(*) as total_items,
+        COALESCE(SUM(i.stock), 0) as total_stock,
+        COALESCE(SUM(CASE WHEN i.stock <= i.min_stock_limit THEN 1 ELSE 0 END), 0) as total_low,
+        COALESCE(SUM(CASE WHEN i.stock <= 0 THEN 1 ELSE 0 END), 0) as total_empty
+    FROM items i
+    $whereClause
+";
+
+$stats = [
+    'total_items' => 0,
+    'total_stock' => 0,
+    'total_low'   => 0,
+    'total_empty' => 0
+];
+
+if (!empty($params)) {
+    $statsStmt = $conn->prepare($statsQuery);
+    $statsStmt->bind_param($types, ...$params);
+    $statsStmt->execute();
+    $statsResult = $statsStmt->get_result();
+    if ($statsResult && $statsRow = $statsResult->fetch_assoc()) {
+        $stats = [
+            'total_items' => (int)($statsRow['total_items'] ?? 0),
+            'total_stock' => (float)($statsRow['total_stock'] ?? 0),
+            'total_low'   => (int)($statsRow['total_low'] ?? 0),
+            'total_empty' => (int)($statsRow['total_empty'] ?? 0)
+        ];
+    }
+    $statsStmt->close();
+} else {
+    $statsResult = db_query($statsQuery);
+    if ($statsResult && $statsRow = $statsResult->fetch_assoc()) {
+        $stats = [
+            'total_items' => (int)($statsRow['total_items'] ?? 0),
+            'total_stock' => (float)($statsRow['total_stock'] ?? 0),
+            'total_low'   => (int)($statsRow['total_low'] ?? 0),
+            'total_empty' => (int)($statsRow['total_empty'] ?? 0)
+        ];
+    }
+}
 ?>
+<!-- Inventory Summary Statistics Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 border-start border-4 border-primary shadow-sm h-100">
+            <div class="card-body py-3 px-3 d-flex align-items-center justify-content-between">
+                <div>
+                    <span class="text-muted small text-uppercase fw-bold">Total Produk</span>
+                    <h4 class="mb-0 fw-bold mt-1 text-dark"><?php echo number_format($stats['total_items']); ?></h4>
+                </div>
+                <div class="rounded-circle bg-primary bg-opacity-10 p-2 text-primary d-flex align-items-center justify-content-center" style="width: 44px; height: 44px;">
+                    <i class="fas fa-boxes fa-lg"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 border-start border-4 border-info shadow-sm h-100">
+            <div class="card-body py-3 px-3 d-flex align-items-center justify-content-between">
+                <div>
+                    <span class="text-muted small text-uppercase fw-bold">Total Unit Stok</span>
+                    <h4 class="mb-0 fw-bold mt-1 text-dark"><?php echo number_format($stats['total_stock']); ?> <small class="text-muted fs-6 fw-normal">Pcs</small></h4>
+                </div>
+                <div class="rounded-circle bg-info bg-opacity-10 p-2 text-info d-flex align-items-center justify-content-center" style="width: 44px; height: 44px;">
+                    <i class="fas fa-cubes fa-lg"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 border-start border-4 border-warning shadow-sm h-100">
+            <div class="card-body py-3 px-3 d-flex align-items-center justify-content-between">
+                <div>
+                    <span class="text-muted small text-uppercase fw-bold">Stok Rendah</span>
+                    <h4 class="mb-0 fw-bold mt-1 <?php echo ($stats['total_low'] > 0) ? 'text-warning' : 'text-dark'; ?>"><?php echo number_format($stats['total_low']); ?></h4>
+                </div>
+                <div class="rounded-circle bg-warning bg-opacity-10 p-2 text-warning d-flex align-items-center justify-content-center" style="width: 44px; height: 44px;">
+                    <i class="fas fa-exclamation-triangle fa-lg"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 border-start border-4 border-danger shadow-sm h-100">
+            <div class="card-body py-3 px-3 d-flex align-items-center justify-content-between">
+                <div>
+                    <span class="text-muted small text-uppercase fw-bold">Stok Habis</span>
+                    <h4 class="mb-0 fw-bold mt-1 <?php echo ($stats['total_empty'] > 0) ? 'text-danger' : 'text-dark'; ?>"><?php echo number_format($stats['total_empty']); ?></h4>
+                </div>
+                <div class="rounded-circle bg-danger bg-opacity-10 p-2 text-danger d-flex align-items-center justify-content-center" style="width: 44px; height: 44px;">
+                    <i class="fas fa-times-circle fa-lg"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h5 class="mb-0">Data Barang</h5>
