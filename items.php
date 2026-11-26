@@ -203,7 +203,7 @@ if (!empty($params)) {
         </div>
     </div>
     <div class="card-body">
-        <?php if ($isFiltered): ?>
+        <?php if ($isFiltered && $result && $result->num_rows > 0): ?>
             <div class="alert alert-info py-2 px-3 mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <span>
                     <i class="fas fa-filter me-1"></i>
@@ -215,7 +215,7 @@ if (!empty($params)) {
                     <?php elseif ($stock_status !== 'all'): ?>
                         dengan status <strong><?php echo $stockStatusLabels[$stock_status]; ?></strong>
                     <?php endif; ?>
-                    (<strong><?php echo $result ? $result->num_rows : 0; ?></strong> barang ditemukan)
+                    (<strong><?php echo $result->num_rows; ?></strong> barang ditemukan)
                 </span>
                 <a href="items.php" class="btn btn-sm btn-outline-secondary py-0 px-2 text-decoration-none">Reset Filter</a>
             </div>
@@ -288,24 +288,35 @@ if (!empty($params)) {
                         <?php endwhile; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="8" class="text-center py-4 text-muted">
+                            <td colspan="8" class="text-center py-5 text-muted">
                                 <?php if ($isFiltered): ?>
-                                    <i class="fas fa-search fa-2x mb-2 d-block opacity-25"></i>
-                                    <?php if ($search !== '' && $stock_status !== 'all'): ?>
-                                        Barang dengan kata kunci "<strong><?php echo htmlspecialchars($search); ?></strong>" dan status <strong><?php echo $stockStatusLabels[$stock_status]; ?></strong> tidak ditemukan.
-                                    <?php elseif ($search !== ''): ?>
-                                        Barang dengan kata kunci "<strong><?php echo htmlspecialchars($search); ?></strong>" tidak ditemukan.
-                                    <?php else: ?>
-                                        Tidak ada barang dengan status <strong><?php echo $stockStatusLabels[$stock_status]; ?></strong>.
-                                    <?php endif; ?>
-                                    <div class="mt-2">
+                                    <i class="fas fa-search fa-3x mb-3 d-block text-secondary opacity-50"></i>
+                                    <h6 class="fw-semibold text-dark mb-1">Tidak ada barang yang sesuai dengan pencarian atau filter.</h6>
+                                    <p class="text-muted small mb-3">
+                                        <?php if ($search !== '' && $stock_status !== 'all'): ?>
+                                            Tidak ditemukan barang dengan kata kunci "<strong><?php echo htmlspecialchars($search); ?></strong>" dan status <strong><?php echo $stockStatusLabels[$stock_status]; ?></strong>.
+                                        <?php elseif ($search !== ''): ?>
+                                            Tidak ditemukan barang dengan kata kunci "<strong><?php echo htmlspecialchars($search); ?></strong>".
+                                        <?php elseif ($stock_status !== 'all'): ?>
+                                            Tidak ditemukan barang dengan status <strong><?php echo $stockStatusLabels[$stock_status]; ?></strong>.
+                                        <?php else: ?>
+                                            Coba gunakan kata kunci lain atau ubah filter status stok.
+                                        <?php endif; ?>
+                                    </p>
+                                    <div>
                                         <a href="items.php" class="btn btn-outline-secondary btn-sm">
-                                            <i class="fas fa-redo me-1"></i> Tampilkan Semua Barang
+                                            <i class="fas fa-undo me-1"></i> Reset Filter
                                         </a>
                                     </div>
                                 <?php else: ?>
-                                    <i class="fas fa-box-open fa-2x mb-2 d-block opacity-25"></i>
-                                    Belum ada data barang.
+                                    <i class="fas fa-box-open fa-3x mb-3 d-block text-secondary opacity-50"></i>
+                                    <h6 class="fw-semibold text-dark mb-1">Belum ada data barang.</h6>
+                                    <p class="text-muted small mb-3">Silakan tambahkan data barang baru untuk memulai pengelolaan inventaris.</p>
+                                    <div>
+                                        <a href="item_form.php" class="btn btn-primary btn-sm">
+                                            <i class="fas fa-plus me-1"></i> Tambah Barang
+                                        </a>
+                                    </div>
                                 <?php endif; ?>
                             </td>
                         </tr>
