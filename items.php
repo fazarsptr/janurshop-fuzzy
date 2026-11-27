@@ -57,7 +57,7 @@ if ($search !== '') {
 }
 
 if ($stock_status === 'low') {
-    $whereConditions[] = "i.stock <= i.min_stock_limit";
+    $whereConditions[] = "(i.stock > 0 AND i.stock <= i.min_stock_limit)";
 } elseif ($stock_status === 'empty') {
     $whereConditions[] = "i.stock <= 0";
 }
@@ -86,7 +86,7 @@ $statsQuery = "
     SELECT
         COUNT(*) as total_items,
         COALESCE(SUM(i.stock), 0) as total_stock,
-        COALESCE(SUM(CASE WHEN i.stock <= i.min_stock_limit THEN 1 ELSE 0 END), 0) as total_low,
+        COALESCE(SUM(CASE WHEN i.stock > 0 AND i.stock <= i.min_stock_limit THEN 1 ELSE 0 END), 0) as total_low,
         COALESCE(SUM(CASE WHEN i.stock <= 0 THEN 1 ELSE 0 END), 0) as total_empty
     FROM items i
     $whereClause
@@ -242,7 +242,7 @@ if (!empty($params)) {
                             $demandLing = FuzzyMamdani::getKategoriDominan($fuzz['Demand']);
                             $expiredLing = FuzzyMamdani::getKategoriDominan($fuzz['Expired']);
                             $isOutOfStock = ((float)$row['stock'] <= 0);
-                            $isLowStock = ((float)$row['stock'] <= (float)$row['min_stock_limit']);
+                            $isLowStock = ((float)$row['stock'] > 0 && (float)$row['stock'] <= (float)$row['min_stock_limit']);
                         ?>
                         <tr class="<?php echo $isOutOfStock ? 'table-danger' : ($isLowStock ? 'table-warning' : ''); ?>">
                             <td><?php echo htmlspecialchars($row['code']); ?></td>
